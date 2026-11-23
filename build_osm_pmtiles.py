@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Compila os arquivos GeoJSONSeq (.geojsonl) por UF em PMTiles via Tippecanoe no WSL Ubuntu.
+Compila os arquivos GeoJSONSeq (.geojsonl) por UF em PMTiles via Tippecanoe no Linux nativo do GitHub Actions.
 """
 
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -19,14 +20,6 @@ from osm_config import (
 )
 
 
-def win_to_wsl_path(win_path: Path) -> str:
-    abs_path = str(win_path.resolve())
-    drive, rest = os.path.splitdrive(abs_path)
-    drive_letter = drive.replace(":", "").lower()
-    clean_rest = rest.replace("\\", "/")
-    return f"/mnt/{drive_letter}{clean_rest}"
-
-
 def build_uf_layer_pmtiles(uf: str, layer_key: str):
     cfg = OSM_LAYERS[layer_key]
     src_geojsonl = get_uf_geojsonl_path(uf, layer_key)
@@ -37,27 +30,38 @@ def build_uf_layer_pmtiles(uf: str, layer_key: str):
         return
 
     dst_pmtiles.parent.mkdir(parents=True, exist_ok=True)
-    wsl_in = win_to_wsl_path(src_geojsonl)
-    wsl_out_final = win_to_wsl_path(dst_pmtiles)
-    wsl_tmp = f"/tmp/osm_{uf}_{layer_key}.pmtiles"
-    flags = " ".join(cfg["tippecanoe_flags"])
+    tmp_pmtiles = Path(f"/tmp/osm_{uf}_{layer_key}.pmtiles")
+    tmp_pmtiles.unlink(missing_ok=True)
 
-    cmd = (
-        f"set -e; "
-        f"rm -f {wsl_tmp}; "
-        f"tippecanoe --read-parallel -P -o {wsl_tmp} "
-        f"-Z{cfg['min_zoom']} -z{cfg['max_zoom']} "
-        f"-l {cfg['layer_name']} "
-        f"--attribution 'OpenStreetMap contributors (Geofabrik)' "
-        f"--force {flags} {wsl_in} && "
-        f"mv -f {wsl_tmp} {wsl_out_final}"
-    )
+    cmd = [
+        "tippecanoe",
+        "--read-parallel",
+        "-P",
+        "-o",
+        str(tmp_pmtiles),
+        f"-Z{cfg['min_zoom']}",
+        f"-z{cfg['max_zoom']}",
+        "-l",
+        cfg["layer_name"],
+        "--attribution",
+        "OpenStreetMap contributors (Geofabrik)",
+        "--force",
+    ]
+    cmd.extend(cfg["tippecanoe_flags"])
+    cmd.append(str(src_geojsonl))
 
     t0 = time.time()
-    subprocess.run(["wsl", "-d", "Ubuntu", "bash", "-c", cmd], check=True)
+    # No Linux nativo (GitHub Actions) ou Windows chamamos diretamente
+    subprocess.run(cmd, check=True)
+    shutil.move(str(tmp_pmtiles), str(dst_pmtiles))
+
     size_mb = dst_pmtiles.stat().st_size / (1024 * 1024)
     print(f"[TILES] {uf}/{dst_pmtiles.name} pronto em {time.time() - t0:.1f}s ({size_mb:.2f} MB)")
     src_geojsonl.unlink(missing_ok=True)
+
+
+def build_pmtiles_for_uf(uf: str, layer_key: str, force: bool = True):
+    build_uf_layer_pmtiles(uf, layer_key)
 
 
 def build_all_pmtiles(target_layers=None, target_ufs=None):

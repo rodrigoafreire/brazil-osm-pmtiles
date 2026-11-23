@@ -1,0 +1,103 @@
+name: Build OSM PMTiles by Region
+
+on:
+  schedule:
+    # Roda todo domingo as 03:00 UTC (00:00 Horario de Brasilia)
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      force_full:
+        description: 'Forcar rebuild completo das regioes'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-region:
+    name: Build PMTiles (${{ matrix.region }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        region: [sudeste, sul, nordeste, centro_oeste, norte]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install system dependencies (Tippecanoe, Osmium)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential libsqlite3-dev zlib1g-dev libosmium2-dev osmium-tool
+          git clone https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          cd /tmp/tippecanoe && make -j$(nproc) && sudo make install
+          tippecanoe --version
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install osmium shapely requests certifi urllib3
+
+      - name: Process Region PMTiles
+        run: |
+          python build_region_worker.py --region ${{ matrix.region }}
+
+      - name: Upload Region Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmtiles-${{ matrix.region }}
+          path: data/OSM/pmtiles/
+          retention-days: 7
+
+  create-release:
+    name: Package and Publish Weekly Release
+    needs: build-region
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download all Region Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: all_pmtiles
+
+      - name: Prepare Release Directory and Manifest
+        run: |
+          python package_release.py
+
+      - name: Create GitHub Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: osm-br-${{ github.run_id }}
+          name: "OSM Brasil PMTiles - Semana ${{ github.run_number }}"
+          body: |
+            Atualização semanal automatizada das 27 UFs do Brasil em formato PMTiles.
+            Camadas: buildings, roads, pois, landuse.
+          files: |
+            release_dist/*.tar.gz
+            release_dist/manifest.json
+          draft: false
+          prerelease: false
+
+      - name: Trigger Private Sync Workflow (Optional)
+        if: ${{ secrets.PRIVATE_SYNC_PAT != '' }}
+        run: |
+          curl -X POST \
+            -H "Accept: application/vnd.github.v3+json" \
+            -H "Authorization: token ${{ secrets.PRIVATE_SYNC_PAT }}" \
+            https://api.github.com/repos/rodrigoafreire/Analise_Urbana/dispatches \
+            -d '{"event_type": "osm_pmtiles_ready", "client_payload": {"tag": "osm-br-${{ github.run_id }}"}}'

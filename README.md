@@ -1,10 +1,10 @@
 # brazil-osm-pmtiles 🗺️🇧🇷
 
-Este repositório é responsável pela **extração semanal e compilação automatizada dos dados do OpenStreetMap Brasil** em formato **PMTiles**, utilizando **GitHub Actions gratuito** particionado em matriz paralela.
+Este repositório é responsável pela **extração semanal e compilação automatizada dos dados do OpenStreetMap Brasil** em formato **PMTiles**, utilizando **GitHub Actions** particionado em matriz paralela.
 
 ---
 
-## 🏗️ Arquitetura do Pipeline
+## Arquitetura do Pipeline
 
 ```
                               OpenStreetMap (Geofabrik)
@@ -29,11 +29,10 @@ Este repositório é responsável pela **extração semanal e compilação autom
 1. **Repositório Público**: Roda toda a computação pesada de graça (minutos ilimitados no GitHub Actions). **Zero credenciais ou senhas** ficam expostas aqui.
 2. **Matriz de Regiões**: 5 máquinas virtuais executam simultaneamente. O tempo total cai de ~5 horas para **menos de 45 minutos**.
 3. **Publicação via Release**: Cada execução gera uma Release com os pacotes `.tar.gz` organizados por região e o `manifest.json`.
-4. **Despacho para o R2**: Um workflow leve de 2 minutos no repositório privado baixa os pacotes gerados na Release pública e envia para o Cloudflare R2 com as chaves privadas.
 
 ---
 
-## 📂 Estrutura de Arquivos
+## Estrutura de Arquivos
 
 - `.github/workflows/build_pmtiles.yml`: Definição da matriz paralela de CI/CD.
 - `build_region_worker.py`: Script executado em cada máquina virtual para extrair e compilar a região específica.
@@ -43,7 +42,7 @@ Este repositório é responsável pela **extração semanal e compilação autom
 
 ---
 
-## 🚀 Como Ativar no GitHub
+## Como Ativar no GitHub
 
 1. Crie um repositório **Público** no seu GitHub: `brazil-osm-pmtiles`.
 2. Faça o push dos arquivos desta pasta:

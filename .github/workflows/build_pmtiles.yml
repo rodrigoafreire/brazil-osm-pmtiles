@@ -94,10 +94,12 @@ jobs:
           prerelease: false
 
       - name: Trigger Private Sync Workflow (Optional)
-        if: ${{ secrets.PRIVATE_SYNC_PAT != '' }}
+        env:
+          SYNC_PAT: ${{ secrets.PRIVATE_SYNC_PAT }}
+        if: env.SYNC_PAT != ''
         run: |
           curl -X POST \
             -H "Accept: application/vnd.github.v3+json" \
-            -H "Authorization: token ${{ secrets.PRIVATE_SYNC_PAT }}" \
+            -H "Authorization: token $SYNC_PAT" \
             https://api.github.com/repos/rodrigoafreire/Analise_Urbana/dispatches \
-            -d '{"event_type": "osm_pmtiles_ready", "client_payload": {"tag": "osm-br-${{ github.run_id }}"}}'
+            -d "{\"event_type\": \"osm_pmtiles_ready\", \"client_payload\": {\"tag\": \"osm-br-${{ github.run_id }}\"}}"

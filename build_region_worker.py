@@ -35,8 +35,17 @@ def download_pbf_if_needed():
     if RAW_PBF_PATH.exists() and RAW_PBF_PATH.stat().st_size > 100 * 1024 * 1024:
         return
     print(f"[WORKER] Baixando {GEOFABRIK_PBF_URL}...")
+    import urllib3
+    urllib3.util.connection.HAS_IPV6 = False  # Força IPv4 no runner do GitHub para evitar Errno 101
     import requests
-    with requests.get(GEOFABRIK_PBF_URL, stream=True, timeout=120) as r:
+    from requests.adapters import HTTPAdapter
+    from urllib3.util import Retry
+
+    session = requests.Session()
+    retries = Retry(total=5, backoff_factor=1, status_forcelist=[500, 502, 503, 504])
+    session.mount("https://", HTTPAdapter(max_retries=retries))
+
+    with session.get(GEOFABRIK_PBF_URL, stream=True, timeout=120) as r:
         r.raise_for_status()
         with open(RAW_PBF_PATH, "wb") as f:
             for chunk in r.iter_content(chunk_size=1024 * 1024 * 8):
